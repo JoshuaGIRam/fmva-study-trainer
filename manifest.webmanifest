@@ -1,1 +1,16 @@
-{"name":"FMVA Study Trainer","short_name":"FMVA Trainer","start_url":"./","display":"standalone","background_color":"#f5f7fb","theme_color":"#0b1220","description":"Mobile-first FMVA preparation tool with adaptive quizzes, formulas and exam mode.","icons":[]}
+{
+  "name": "FMVA Trainer",
+  "short_name": "FMVA Trainer",
+  "description": "Gamified FMVA exam prep: lessons, live calculations, Excel cases and mock exams.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1f6feb",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
