@@ -1,10 +1,10 @@
 /* FMVA Trainer v2 service worker.
    Network-first for the app shell so updates always arrive when online; cache fallback offline.
    Bump VERSION on every release. Old caches (including v1's "fmva-trainer-v1") are deleted on activate. */
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const CACHE = 'fmva-trainer-' + VERSION;
-const SHELL = ['./', './index.html', './manifest.webmanifest', './css/app.css?v=2.0.0',
-  './js/units.js?v=2.0.0', './js/bank.js?v=2.0.0', './js/generators.js?v=2.0.0', './js/cases.js?v=2.0.0', './js/app.js?v=2.0.0',
+const SHELL = ['./', './index.html', './manifest.webmanifest', './css/app.css?v=2.1.0',
+  './js/units.js?v=2.1.0', './js/bank.js?v=2.1.0', './js/generators.js?v=2.1.0', './js/cases.js?v=2.1.0', './js/concepts.js?v=2.1.0', './js/app.js?v=2.1.0',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

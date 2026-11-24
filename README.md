@@ -1,8 +1,9 @@
-# FMVA Trainer v2
+# FMVA Trainer v2.1
 
 Gamified, mobile-first PWA for passing CFI's FMVA® final exam. It is plain HTML/CSS/JS with no build step and runs on GitHub Pages.
 
 ## What's inside
+- **Teach-first lessons (v2.1)**: 59 plain-English concept cards with worked examples and Excel tips. Each lesson introduces the next concept before quizzing on it, and never tests what it hasn't taught. Every question has a 💡 Teach me button, and 79 jargon terms are tappable for a quick definition (turned off in mock exams). There is also a new Finance Basics starter unit.
 - **Learning path** of 16 units mapped to the 15 FMVA core courses (2026 curriculum), plus an Excel toolkit unit. There are 4 sections, checkpoint case studies, and a final mock.
 - **120 conceptual questions** with plausible wrong answers and explanations.
 - **37 calculation generators** covering CAPM, WACC, beta, FCFF/FCFE, terminal value (Gordon, exit, implied g), mid-year discounting, the EV bridge, comps, precedents, calendarization, NWC, the debt and PP&E schedules, CFO, DuPont, CCC, CAGR, break-even, the Excel NPV trap, PMT, CHOOSE scenarios and sensitivity. Every question uses fresh numbers and an answer computed in code. Wrong options come from common mistakes.

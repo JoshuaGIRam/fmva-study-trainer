@@ -158,3 +158,16 @@ input[type=text],textarea,select{width:100%;padding:12px;border-radius:12px;bord
 canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:70}
 .shake{animation:shake .3s}@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 .pop{animation:pop .35s}@keyframes pop{50%{transform:scale(1.15)}}
+
+/* v2.1 teaching layer */
+.scrim.still,.sheet.still{animation:none}
+.pill.new{background:#fff4d6;color:#9a6200}
+@media (prefers-color-scheme:dark){.pill.new{background:#3a2e10;color:#ffd27a}}
+.learn p{font-size:16.5px;line-height:1.55;margin:10px 0}
+.example{background:color-mix(in srgb,var(--brand) 7%,var(--card));border-left:4px solid var(--brand);border-radius:12px;padding:12px 14px;margin:14px 0;font-size:15px;line-height:1.55}
+.xltip{background:var(--green-bg);border-left:4px solid var(--green);border-radius:12px;padding:12px 14px;margin:14px 0;font-size:14.5px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.xltip .tiny{font-family:ui-rounded,system-ui,sans-serif}
+.term{display:inline;padding:0;margin:0;font:inherit;color:inherit;line-height:inherit;text-align:inherit;border-bottom:2px dotted var(--brand);border-radius:0;cursor:help}
+.footer .term{border-bottom-color:currentColor}
+details.concept-d summary{cursor:pointer;list-style:none}details.concept-d summary::-webkit-details-marker{display:none}
+details.concept-d summary::after{content:"›";float:right;color:var(--muted);transition:transform .15s}details.concept-d[open] summary::after{transform:rotate(90deg)}

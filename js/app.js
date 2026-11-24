@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const F = window.FMVA;
-  const VERSION = '2.0.0';
+  const VERSION = '2.1.0';
   const KEY = 'fmvaTrainerV2';
   const DAY = 864e5;
 
@@ -22,7 +22,7 @@
     v: 2, created: Date.now(), onboarded: false,
     settings: { goal: 50, sound: true, haptics: true, examDate: '' },
     xp: 0, xpDay: {}, streak: { count: 0, last: null, best: 0, freezes: 1, frozen: [] },
-    units: {}, topics: {}, items: {}, cases: {}, mocks: [], badges: {}, flags: [], mock: null,
+    units: {}, topics: {}, items: {}, cases: {}, mocks: [], badges: {}, flags: [], mock: null, seen: {},
     stats: { answered: 0, correct: 0, bestCombo: 0, lessons: 0, perfect: 0, calcCorrect: 0, waccCorrect: 0 },
   });
   function load() {
@@ -46,7 +46,7 @@
   Object.values(F.gens).forEach((g) => byUnit[g.unit].gens.push(g.id));
   const sectionOf = {}; F.sections.forEach((s, i) => s.units.forEach((u) => (sectionOf[u] = i)));
   const COLORS = [['var(--s1)', 'var(--s1d)'], ['var(--s2)', 'var(--s2d)'], ['var(--s3)', 'var(--s3d)'], ['var(--s4)', 'var(--s4d)']];
-  const WEIGHT = { xl: 1, fa: 1.2, mg: 1, i3: 1.3, m3: 1.5, fc: 1.1, op: 1.1, au: 1.2, bv: 1.1, d1: 1.5, d2: 1.5, cv: 1.3, ss: 1.2, dv: 0.8, pp: 0.7, et: 0.7 };
+  const WEIGHT = { ff: 0.8, xl: 1, fa: 1.2, mg: 1, i3: 1.3, m3: 1.5, fc: 1.1, op: 1.1, au: 1.2, bv: 1.1, d1: 1.5, d2: 1.5, cv: 1.3, ss: 1.2, dv: 0.8, pp: 0.7, et: 0.7 };
   const validItem = (k) => (k.startsWith('g:') ? !!F.gens[k.slice(2)] : !!(bankIdx[k] || caseQ[k]));
 
   function getQ(id) {
@@ -189,18 +189,41 @@
   }
   function prio(id) { const it = S.items[id]; if (!it) return Math.random() * 0.5; return (it.due <= Date.now() ? 1 : 3) + it.box * 0.3 + Math.random() * 0.6; }
 
+  const conceptKey = (q) => q.unit + '|' + q.topic;
+  const unseenTopics = (u) => (F.topicOrder[u] || []).filter((t) => !S.seen[u + '|' + t]);
+  function fill(out, cs, gs, target) {
+    cs = cs.filter((q) => !out.includes(q.id)); const gsh = shuffle(gs); let gi = 0, turn = 0, guard = 0;
+    const uses = (g) => out.filter((x) => x === 'g:' + g).length;
+    while (out.length < target && guard++ < 60) {
+      let g = null;
+      for (let k = 0; k < gsh.length; k++) { const c = gsh[(gi + k) % gsh.length]; if (uses(c) < 2) { g = c; gi += k + 1; break; } }
+      if (g && (turn++ % 2 === 0 || !cs.length)) out.push('g:' + g);
+      else if (cs.length) out.push(cs.shift().id);
+      else break;
+    }
+  }
+  // Teach-first lesson: introduces the next 1–2 unseen concepts (explainer cards), then quizzes only on concepts already taught.
   function buildLesson(u, { n = 8, legend = false } = {}) {
-    const st = unitState(u), lvl = st.level, pool = byUnit[u];
+    const st = unitState(u), lvl = st.level, pool = byUnit[u], order = F.topicOrder[u] || [];
+    const isSeen = (t) => !!S.seen[u + '|' + t];
+    const unseen = unseenTopics(u), teach = legend ? [] : unseen.slice(0, order.some(isSeen) ? 1 : 2);
+    const avail = (ts) => pool.concept.filter((q) => ts.has(q.topic)).length + 2 * pool.gens.filter((g) => ts.has(F.gens[g].topic)).length;
+    // if the taught topics don't have enough questions yet, teach one more concept (max 3 per lesson)
+    while (!legend && teach.length < 3 && teach.length < unseen.length && avail(new Set(order.filter(isSeen).concat(teach))) < 6) teach.push(unseen[teach.length]);
+    const teachSet = new Set(teach);
+    const allowed = new Set(legend || !order.length ? pool.concept.map((q) => q.topic).concat(pool.gens.map((g) => F.gens[g].topic)) : order.filter(isSeen).concat(teach));
     const want = (d) => (legend ? d >= 2 : lvl <= 1 ? d <= 2 : lvl >= 4 ? d >= 2 : true);
-    let concepts = pool.concept.filter((q) => want(q.diff)); if (concepts.length < 4) concepts = pool.concept.slice();
+    let concepts = pool.concept.filter((q) => allowed.has(q.topic)), gens = pool.gens.filter((g) => allowed.has(F.gens[g].topic));
+    if (!concepts.length && !gens.length) { concepts = pool.concept.slice(); gens = pool.gens.slice(); }
+    const cf = concepts.filter((q) => want(q.diff)); if (cf.length >= 4) concepts = cf;
+    const gf = gens.filter((g) => want(F.gens[g].diff)); if (gf.length) gens = gf;
     concepts = shuffle(concepts).sort((a, b) => prio(a.id) - prio(b.id));
-    let gens = pool.gens.filter((g) => want(F.gens[g].diff)); if (!gens.length) gens = pool.gens.slice();
-    const nCalc = gens.length ? Math.round(n * (legend ? 0.6 : 0.5)) : 0;
-    const out = []; let gq = shuffle(gens);
-    for (let i = 0; i < nCalc; i++) { if (!gq.length) gq = shuffle(gens); out.push('g:' + gq.pop()); }
-    concepts.slice(0, n - out.length).forEach((q) => out.push(q.id));
-    while (out.length < n) out.push(gens.length ? 'g:' + pick(gens) : pick(pool.concept).id);
-    return shuffle(out);
+    const out = [];
+    if (teach.length) fill(out, concepts.filter((q) => teachSet.has(q.topic)), gens.filter((g) => teachSet.has(F.gens[g].topic)), Math.ceil(n * 0.6));
+    fill(out, concepts.filter((q) => !teachSet.has(q.topic)), gens.filter((g) => !teachSet.has(F.gens[g].topic)), n);
+    fill(out, concepts, gens, n);
+    if (legend || !unseen.length) fill(out, pool.concept, pool.gens, n);
+    return teach.map((t) => 'learn:' + u + '|' + t).concat(shuffle(out));
   }
   function buildSmart(n = 10) {
     const now = Date.now();
@@ -239,6 +262,7 @@
   let sheet = null; // html for bottom sheet
   let review = null; // reviewing a finished mock
   let calcExpr = '';
+  let sheetWasOpen = false;
 
   // ================= rendering =================
   function render() {
@@ -250,7 +274,9 @@
     else if (sess) body = sess.done ? renderSummary() : renderSession();
     else body = { learn: renderLearn, practice: renderPractice, exam: renderExam, notes: renderNotes, profile: renderProfile }[view.tab]();
     app.className = 'app' + (inSession ? ' session' : '') + (sess && sess.checked && !sess.done ? ' checked' : '');
-    app.innerHTML = (inSession ? '' : topbar()) + body + (inSession ? '' : tabs()) + (sheet ? `<div class="scrim" data-a="closeSheet"></div><div class="sheet">${sheet}</div>` : '');
+    const still = sheet && sheetWasOpen ? ' still' : '';
+    app.innerHTML = (inSession ? '' : topbar()) + body + (inSession ? '' : tabs()) + (sheet ? `<div class="scrim${still}" data-a="closeSheet"></div><div class="sheet${still}">${sheet}</div>` : '');
+    sheetWasOpen = !!sheet;
     if (S.mock) tickMock();
   }
   function topbar() {
@@ -275,7 +301,7 @@
     const rd = readiness(), rec = recommendedUnit();
     const ex = S.settings.examDate ? daysBetween(dayKey(), S.settings.examDate) : null;
     let h = `<div class="card"><div class="row"><div><div class="muted small" style="font-weight:800">EXAM READINESS</div><div class="big">${pct(rd.r)}%</div>
-      <div class="small muted">${rd.rated}/16 units rated · pass mark 70%${ex !== null && ex >= 0 ? ` · <b>${ex} days</b> to exam` : ''}</div></div>
+      <div class="small muted">${rd.rated}/${F.unitOrder.length} units rated · pass mark 70%${ex !== null && ex >= 0 ? ` · <b>${ex} days</b> to exam` : ''}</div></div>
       <div class="gauge" style="--p:${pct(rd.r)};--c:${rd.r >= 0.8 ? 'var(--green)' : rd.r >= 0.7 ? 'var(--gold)' : 'var(--brand)'};width:86px;height:86px"><div style="width:66px;height:66px;font-size:22px">${rd.r >= 0.8 ? '🚀' : rd.r >= 0.7 ? '✅' : '📈'}</div></div></div>
       <div style="margin-top:12px" class="grid2"><button class="btn green sm" data-a="startUnit" data-v="${rec}">Continue: ${esc(F.units[rec].name)}</button><button class="btn ghost sm" data-a="smart">Smart practice</button></div></div>`;
     F.sections.forEach((s, si) => {
@@ -306,7 +332,8 @@
       <div class="stat"><div class="v">${m === null ? '–' : pct(m) + '%'}</div><div class="l">Mastery</div></div><div class="stat"><div class="v">${nq}+${ng}</div><div class="l">Q's · generators</div></div></div>
       <div class="bar gold" style="margin-bottom:6px"><i style="width:${st.legend ? 100 : st.level * 20 + (st.lessons % 2) * 10}%"></i></div>
       <div class="small muted" style="margin-bottom:16px">${st.level >= 5 ? (st.legend ? 'Legendary! You have mastered this unit.' : 'Max level. Try the Legendary challenge: 10 hard questions in 15 min, 90% to pass.') : `2 lessons per level · ${st.lessons % 2}/2 done toward level ${st.level + 1}`}</div>
-      <div class="stack"><button class="btn green" data-a="startUnit" data-v="${u}">Start lesson · 8 questions</button>
+      ${(() => { const tot = (F.topicOrder[u] || []).length, un = unseenTopics(u).length; return `<div class="small" style="margin:-6px 0 14px"><b>Concepts learned: ${tot - un}/${tot}</b>${un ? ' · each lesson teaches the next one before quizzing you' : ' ✓'}</div>`; })()}
+      <div class="stack"><button class="btn green" data-a="startUnit" data-v="${u}">${unseenTopics(u).length ? '✨ Learn new concept + 8 questions' : 'Start lesson · 8 questions'}</button>
       ${st.level >= 5 && !st.legend ? `<button class="btn purple" data-a="legend" data-v="${u}">👑 Legendary challenge</button>` : ''}
       <button class="btn ghost" data-a="openNote" data-v="${u}">Read notes</button></div>`;
   }
@@ -367,15 +394,22 @@
     ['Operations', [['Contribution margin', 'Price − variable cost'], ['Break-even units', 'Fixed costs ÷ contribution margin'], ['Revenue (capacity)', 'Capacity × utilization × price']]],
   ];
   function renderNotes() {
+    if (view.note === 'glossary') {
+      const all = Object.values(F.glossary).sort((a, b) => a.term.localeCompare(b.term));
+      return `<button class="link" data-a="noteBack">‹ All notes</button><div class="h1">Glossary</div><p class="muted" style="margin-top:0">Every underlined term in a question links here.</p><div class="card">${all.map((g) => `<div class="list-item" style="display:block"><b>${esc(g.term)}</b><div class="small">${esc(g.def)}</div>${g.concept ? `<button class="link small" data-a="concept" data-v="${g.concept}">Learn more ›</button>` : ''}</div>`).join('')}</div>`;
+    }
     if (view.note === 'formulas') return `<button class="link" data-a="noteBack">‹ All notes</button><div class="h1">Formula sheet</div>` + FORMULAS.map(([g, rows]) => `<div class="card"><div class="h2">${g}</div><table class="t">${rows.map(([a, b]) => `<tr><td><b>${esc(a)}</b></td><td style="text-align:left">${esc(b)}</td></tr>`).join('')}</table></div>`).join('');
     if (view.note) {
       const u = F.units[view.note];
+      const cards = (F.topicOrder[view.note] || []).map((t) => F.concepts[view.note + '|' + t]);
       return `<button class="link" data-a="noteBack">‹ All notes</button><div class="h1">${u.icon} ${esc(u.name)}</div><div class="pill">${esc(u.course)}</div>
-        <div class="card notes" style="margin-top:12px">${u.notes.map(([t, items]) => `<h3>${esc(t)}</h3><ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul>`).join('')}</div>
+        <div class="h2" style="margin-top:18px">Concepts</div>${cards.map((c) => `<details class="card concept-d"><summary><b>${esc(c.title)}</b>${S.seen[c.unit + '|' + c.topic] ? '' : ' <span class="pill new">new</span>'}</summary>${cardHTML(c, false, true)}</details>`).join('')}
+        <div class="h2" style="margin-top:18px">Cheat sheet</div><div class="card notes">${u.notes.map(([t, items]) => `<h3>${esc(t)}</h3><ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul>`).join('')}</div>
         <button class="btn green" data-a="startUnit" data-v="${view.note}">Practice this unit</button>`;
     }
-    let h = `<div class="h1">Notes</div><p class="muted" style="margin-top:0">Short, exam-focused summaries. Read one, then do a lesson. Active recall beats re-reading.</p>
-      <div class="card"><button class="list-item" style="width:100%;text-align:left" data-a="openNote" data-v="formulas"><span class="ico" style="background:var(--gold)">ƒ</span><span style="flex:1"><b>Formula sheet</b><br><span class="small muted">Every formula you need, on one page</span></span><span class="muted">›</span></button></div>`;
+    let h = `<div class="h1">Notes</div><p class="muted" style="margin-top:0">Plain-English concept explainers plus a cheat sheet per unit. Lessons teach these automatically, so come here to revise.</p>
+      <div class="card"><button class="list-item" style="width:100%;text-align:left" data-a="openNote" data-v="formulas"><span class="ico" style="background:var(--gold)">ƒ</span><span style="flex:1"><b>Formula sheet</b><br><span class="small muted">Every formula you need, on one page</span></span><span class="muted">›</span></button>
+      <button class="list-item" style="width:100%;text-align:left" data-a="openNote" data-v="glossary"><span class="ico" style="background:var(--purple)">Aa</span><span style="flex:1"><b>Glossary</b><br><span class="small muted">${Object.keys(F.glossary).length} terms in plain English</span></span><span class="muted">›</span></button></div>`;
     F.sections.forEach((s, si) => { h += `<div class="h2" style="margin-top:18px">${esc(s.name)}</div><div class="card">${s.units.map((u) => `<button class="list-item" style="width:100%;text-align:left" data-a="openNote" data-v="${u}"><span class="ico" style="background:${COLORS[si][0]}">${F.units[u].icon}</span><span style="flex:1"><b>${esc(F.units[u].name)}</b><br><span class="small muted">${esc(F.units[u].course)}</span></span><span class="muted">›</span></button>`).join('')}</div>`; });
     return h;
   }
@@ -421,7 +455,7 @@
       else if (i === sel) cls = 'sel';
       return `<button class="opt ${cls}" data-a="sel" data-v="${i}" ${state ? 'disabled' : ''}><span class="k">${'ABCD'[i]}</span><span>${esc(o)}</span></button>`;
     }).join('');
-    return `${q.caseId ? caseContext(q.caseId, !state && (!sess || sess.i === 0 || sess.mode !== 'case')) : ''}<div>${tags}</div><div class="qtext">${esc(q.q)}</div><div class="opts">${opts}</div>`;
+    return `${q.caseId ? caseContext(q.caseId, !state && (!sess || sess.i === 0 || sess.mode !== 'case')) : ''}<div>${tags}</div><div class="qtext">${S.mock && !review ? esc(q.q) : F.linkify(q.q)}</div><div class="opts">${opts}</div>`;
   }
   function startSession(mode, ids, extra = {}) {
     if (!ids.length) { toast('Nothing to practice here yet'); return; }
@@ -429,18 +463,28 @@
     sheet = null; window.scrollTo(0, 0); render();
   }
   function renderSession() {
-    const s = sess; if (!s.cur) { s.cur = getQ(s.queue[s.i]); s.cur.retry = s.retrySet && s.retrySet.has(s.i); }
-    const q = s.cur, prog = pct(s.i / s.queue.length);
+    const s = sess, item = s.queue[s.i], prog = pct(s.i / s.queue.length);
+    if (item.startsWith('learn:')) {
+      const key = item.slice(6); S.seen[key] = S.seen[key] || Date.now(); save();
+      const nLearn = s.queue.filter((x) => x.startsWith('learn:')).length, k = s.queue.slice(0, s.i + 1).filter((x) => x.startsWith('learn:')).length;
+      return `<div class="sbar"><button class="x" data-a="quit" aria-label="Quit">✕</button><div class="bar"><i style="width:${prog}%"></i></div><span class="combo"></span></div>
+        <div class="pill new">✨ New concept${nLearn > 1 ? ` ${k} of ${nLearn}` : ''}</div>${cardHTML(F.concepts[key], true)}
+        <p class="small muted" style="text-align:center">Next: practice questions on this. Tap 💡 Teach me on any question to come back here.</p>
+        <div class="footer"><div class="footer-in"><button class="btn green" data-a="next">Got it</button></div></div>`;
+    }
+    if (!s.cur) { s.cur = getQ(item); s.cur.retry = s.retrySet && s.retrySet.has(s.i); }
+    const q = s.cur;
     const timer = s.timeLimit ? `<span class="timer" id="stimer">${mmss(s.timeLimit - (Date.now() - s.start))}</span>` : `<span class="combo">${s.combo >= 3 ? '🔥' + s.combo : ''}</span>`;
     let h = `<div class="sbar"><button class="x" data-a="quit" aria-label="Quit">✕</button><div class="bar"><i style="width:${prog}%"></i></div>${timer}</div>`;
     if (q.retry) h += `<div class="pill" style="background:var(--red-bg);color:var(--red-d);margin-bottom:6px">↻ Let's try that again</div>`;
     h += qBody(q, s.sel, s.checked ? 'checked' : null);
-    h += `<div class="tools"><button data-a="calc">🧮 Calculator</button><button data-a="flag">🚩 Flag question</button></div>`;
+    h += `<div class="tools"><button data-a="teach">💡 Teach me</button><button data-a="calc">🧮 Calculator</button><button data-a="flag">🚩 Flag</button></div>`;
     if (!s.checked) h += `<div class="footer"><div class="footer-in"><button class="btn green" data-a="check" ${s.sel === null ? 'disabled' : ''}>Check</button></div></div>`;
     else {
       const ok = s.sel === q.ans;
       h += `<div class="footer ${ok ? 'ok' : 'bad'}"><div class="footer-in"><div class="row"><div class="verdict">${s.verdict}</div><button class="small" style="font-weight:800;color:var(--muted)" data-a="flag">🚩 Flag</button></div>
-        ${ok ? '' : `<div class="small" style="font-weight:800;margin-bottom:4px">Correct answer: ${esc(q.opts[q.ans])}</div>`}<div class="exp">${esc(q.exp)}</div>
+        ${ok ? '' : `<div class="small" style="font-weight:800;margin-bottom:4px">Correct answer: ${esc(q.opts[q.ans])}</div>`}<div class="exp">${F.linkify(q.exp)}</div>
+        ${ok ? '' : `<button class="link small" style="margin:0 0 10px" data-a="teach">💡 Teach me this concept</button>`}
         <button class="btn ${ok ? 'green' : 'red'}" data-a="next">Continue</button></div></div>`;
     }
     if (s.timeLimit) { clearTimeout(sessTimer); sessTimer = setTimeout(tickSession, 1000); }
@@ -454,7 +498,7 @@
     sessTimer = setTimeout(tickSession, 1000);
   }
   function check() {
-    const s = sess, q = s.cur; if (s.sel === null || s.checked) return;
+    const s = sess, q = s.cur; if (!q || s.sel === null || s.checked) return;
     const ok = s.sel === q.ans; s.checked = true;
     record(q, ok);
     if (!q.retry) s.results.push({ ok, unit: q.unit });
@@ -536,8 +580,8 @@
     if (r.i !== null) {
       const q = m.qs[r.i], chosen = m.ans[r.i];
       return `<div class="sbar"><button class="x" data-a="revBack">‹</button><div style="flex:1;font-weight:800">Question ${r.i + 1} of ${m.n}</div></div>${qBody(q, chosen, 'checked')}
-        <div class="card" style="margin-top:14px;border-color:${chosen === q.ans ? 'var(--green)' : 'var(--red)'}"><b>${chosen === null ? 'Not answered' : chosen === q.ans ? 'Correct' : 'Incorrect'}</b><p class="small" style="margin-bottom:0">${esc(q.exp)}</p></div>
-        <div class="tools"><button data-a="flag">🚩 Report issue</button></div>
+        <div class="card" style="margin-top:14px;border-color:${chosen === q.ans ? 'var(--green)' : 'var(--red)'}"><b>${chosen === null ? 'Not answered' : chosen === q.ans ? 'Correct' : 'Incorrect'}</b><p class="small" style="margin-bottom:0">${F.linkify(q.exp)}</p></div>
+        <div class="tools"><button data-a="teach">💡 Teach me</button><button data-a="flag">🚩 Report issue</button></div>
         <div class="grid2" style="margin-top:14px"><button class="btn ghost" data-a="revGo" data-v="${r.i - 1}" ${r.i === 0 ? 'disabled' : ''}>‹ Prev</button><button class="btn ghost" data-a="revGo" data-v="${r.i + 1}" ${r.i === m.n - 1 ? 'disabled' : ''}>Next ›</button></div>`;
     }
     const pass = r.score >= 0.7, units = Object.entries(r.byUnit).sort((a, b) => a[1].c / a[1].n - b[1].c / b[1].n);
@@ -545,6 +589,34 @@
       <div class="card"><div class="h2">By unit (weakest first)</div>${units.map(([u, b]) => `<div style="margin:10px 0"><div class="row small"><b>${esc(F.units[u].name)}</b><span>${b.c}/${b.n}</span></div><div class="bar" style="height:8px"><i style="width:${pct(b.c / b.n)}%;background:${b.c / b.n >= 0.7 ? 'var(--green)' : 'var(--red)'}"></i></div></div>`).join('')}</div>
       <div class="card"><div class="h2">Review answers</div><div class="qgrid">${m.qs.map((q, i) => `<button class="${m.ans[i] === q.ans ? 'r' : 'w'}" data-a="revGo" data-v="${i}">${i + 1}</button>`).join('')}</div></div>
       <div class="stack"><button class="btn green" data-a="revDone">Done</button><button class="btn ghost" data-a="revWeak">Practice my weakest units</button></div>`;
+  }
+
+  // ---------- teaching: explainer cards, Teach me, glossary ----------
+  function cardHTML(c, big, bare) {
+    if (!c) return '<p class="muted">No explainer for this one yet. Flag it and I\'ll add one.</p>';
+    return `${bare ? '' : `<div class="${big ? 'h1' : 'h2'}" style="margin-top:8px">${esc(c.title)}</div>`}<div class="learn">${c.body.map((p) => `<p>${p}</p>`).join('')}</div>
+      ${c.example ? `<div class="example"><div class="tiny" style="font-weight:900;letter-spacing:.06em;color:var(--brand)">WORKED EXAMPLE</div>${c.example}</div>` : ''}
+      ${c.excel ? `<div class="xltip"><div class="tiny" style="font-weight:900;letter-spacing:.06em;color:var(--green-d)">IN EXCEL</div>${c.excel}</div>` : ''}`;
+  }
+  function conceptSheet(key) {
+    const c = F.concepts[key]; if (c) { S.seen[key] = S.seen[key] || Date.now(); save(); }
+    sheet = `<div class="row"><div class="pill new">💡 ${c ? esc(F.units[c.unit].name) : 'Concept'}</div><button class="link" data-a="closeSheet">Done</button></div>${cardHTML(c)}
+      <button class="btn ghost" style="margin-top:14px" data-a="closeSheet">Back to the question</button>`;
+    render();
+  }
+  function teachSheet() {
+    const cq = currentQ(); if (!cq) return;
+    const q = cq.q, key = conceptKey(q);
+    if (F.concepts[key]) return conceptSheet(key);
+    const keys = (F.topicOrder[q.unit] || []).map((t) => q.unit + '|' + t);
+    sheet = `<div class="row"><div class="h2">💡 Which concept do you need?</div><button class="link" data-a="closeSheet">Done</button></div><div class="card">${keys.map((k) => `<button class="list-item" style="width:100%;text-align:left" data-a="concept" data-v="${esc(k)}"><span style="flex:1"><b>${esc(F.concepts[k].title)}</b></span><span class="muted">›</span></button>`).join('')}</div>`;
+    render();
+  }
+  function termSheet(key) {
+    const g = F.glossary[key]; if (!g) return;
+    sheet = `<div class="row"><div class="pill">Glossary</div><button class="link" data-a="closeSheet">Done</button></div><div class="h1" style="font-size:22px">${esc(g.term)}</div><p style="font-size:17px">${esc(g.def)}</p>
+      ${g.concept && F.concepts[g.concept] ? `<button class="btn ghost" data-a="concept" data-v="${g.concept}">💡 Learn the full concept</button>` : ''}`;
+    render();
   }
 
   // ---------- sheets: flag, calculator, onboarding ----------
@@ -612,6 +684,9 @@
       save(); sheet = null; render(); toast('🚩 Flag saved. Thanks, beta tester!');
     },
     calc: () => calcSheet(),
+    teach: () => teachSheet(),
+    concept: (v) => conceptSheet(v),
+    term: (v) => termSheet(v),
     key: (v) => { if (v === 'C') calcExpr = ''; else if (v === '⌫') calcExpr = calcExpr.slice(0, -1); else if (v === '=') { const m = (sheet.match(/calc-display">= ([^<]+)/) || [])[1]; if (m) calcExpr = m.replace(/,/g, ''); } else calcExpr += v; calcSheet(); },
     goal: (v) => { S.settings.goal = +v; save(); if (!S.onboarded) onboarding(); render(); },
     toggle: (v) => { S.settings[v] = !S.settings[v]; save(); render(); },
@@ -636,6 +711,7 @@
     if (sheet || e.target.closest('input,textarea')) return;
     const k = e.key.toLowerCase();
     if (S.mock && !review) { if ('abcd'.includes(k) && k.length === 1) A.sel('abcd'.indexOf(k)); else if (e.key === 'ArrowRight') A.mnext(); else if (e.key === 'ArrowLeft') A.mprev(); return; }
+    if (sess && !sess.done && sess.queue[sess.i].startsWith('learn:')) { if (e.key === 'Enter') next(); return; }
     if (sess && !sess.done) { if ('abcd1234'.includes(k) && k.length === 1 && !sess.checked) A.sel('abcd1234'.indexOf(k) % 4); else if (e.key === 'Enter') sess.checked ? next() : check(); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkStreak(); if (!sess && !S.mock && !review) render(); } });
@@ -645,7 +721,7 @@
   if (!S.onboarded) onboarding();
   render();
   flushCelebrations();
-  window.__FMVA_TEST__ = { get S() { return S; }, get sess() { return sess; }, checkStreak, addXP, A, buildLesson, buildSmart, buildMock, getQ, readiness };
+  window.__FMVA_TEST__ = { get S() { return S; }, get sess() { return sess; }, get sheet() { return sheet; }, checkStreak, addXP, A, buildLesson, buildSmart, buildMock, getQ, readiness };
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     const hadController = !!navigator.serviceWorker.controller;

@@ -4,18 +4,24 @@
   const F = (G.FMVA = G.FMVA || {});
 
   F.sections = [
-    { id: 's1', name: 'Foundations', sub: 'Excel, analysis & model design', units: ['xl', 'fa', 'mg'] },
+    { id: 's1', name: 'Foundations', sub: 'Finance basics, Excel, analysis & model design', units: ['ff', 'xl', 'fa', 'mg'] },
     { id: 's2', name: 'Building the Model', sub: '3 statements, forecasting & auditing', units: ['i3', 'm3', 'fc', 'op', 'au'], checkpoint: ['case_3s', 'case_audit'] },
     { id: 's3', name: 'Valuation', sub: 'DCF and relative valuation', units: ['bv', 'd1', 'd2', 'cv'], checkpoint: ['case_dcf', 'case_comps'] },
     { id: 's4', name: 'Analysis & Communication', sub: 'Scenarios, dashboards, pitchbooks, ethics', units: ['ss', 'dv', 'pp', 'et'], checkpoint: ['mock'] },
   ];
 
   F.units = {
+    ff: { name: 'Finance Basics', icon: '$', course: 'Starter: accounting & finance fundamentals the core courses assume',
+      notes: [
+        ['The three statements', ['Income statement = performance over a period. Balance sheet = snapshot on one date (Assets = Liabilities + Equity). Cash flow statement = actual cash in/out: operating, investing, financing.', 'Profit ≠ cash: credit sales, depreciation, CapEx and working capital all create gaps.']],
+        ['Income statement waterfall', ['Revenue − COGS = Gross profit − SG&A = EBITDA − D&A = EBIT − Interest = Pre-tax income − Tax = Net income.']],
+        ['Time value of money', ['FV = PV × (1+r)ⁿ (compounding). PV = FV ÷ (1+r)ⁿ (discounting). Higher r or longer n → lower PV.']],
+        ['Loans & annuities', ['Equal payments = annuity. Excel: =PMT(rate, nper, pv). Match units: monthly rate = annual ÷ 12, months = years × 12.', 'Payment > interest-only, because principal is also repaid.']],
+      ] },
     xl: { name: 'Excel Toolkit', icon: '⌗', course: 'Excel skills used across the program (Advanced Excel Formulas is an elective)',
       notes: [
         ['Lookups', ['<b>XLOOKUP(lookup, lookup_array, return_array, [if_not_found], [match_mode])</b> — exact match by default, can search left, returns a default instead of #N/A.', '<b>INDEX(range, MATCH(value, lookup_range, 0))</b> — the classic flexible lookup; the 0 forces exact match.', 'VLOOKUP defaults to approximate match (TRUE) — always pass FALSE/0 for exact match. It cannot look left and breaks when columns are inserted.']],
         ['Aggregation', ['<b>SUMIFS(sum_range, crit_range1, crit1, …)</b> — the sum range comes FIRST (unlike SUMIF).', 'SUMPRODUCT multiplies arrays element-wise then sums — useful for weighted averages.', 'Use MIN/MAX to cap/floor values (e.g., revolver draws, cash sweeps).']],
-        ['Finance functions', ['<b>NPV(rate, values)</b> treats the first value as end of period 1. For a time-0 outlay use <b>=CF0 + NPV(rate, CF1:CFn)</b>.', '<b>XNPV / XIRR</b> use actual dates — preferred when cash flows are irregular.', '<b>PMT(rate, nper, pv)</b> gives a level payment; the sign is opposite to pv.', 'IRR can have multiple answers when cash flows change sign more than once.']],
         ['Scenario tools', ['CHOOSE(index, v1, v2, v3) and INDEX/MATCH on a scenario table drive live scenarios.', 'Data tables (What-If Analysis) run sensitivities; they recalculate constantly — set calculation to "Automatic except data tables" in large models.', 'Goal Seek finds the input that makes an output hit a target (one variable).']],
         ['Shortcuts worth knowing', ['F2 edit cell · F4 toggle $ anchors · Ctrl+[ trace precedents · Ctrl+` show formulas · Alt+M+P / Alt+M+D trace precedents/dependents.', 'Absolute ($A$1), mixed ($A1 / A$1) and relative references — mixed refs let one formula fill a whole grid.']],
       ] },
@@ -73,6 +79,7 @@
         ['Three approaches', ['<b>Intrinsic</b> (DCF): value of future cash flows. <b>Relative</b>: trading comps and precedent transactions. Also asset-based (liquidation/replacement).', 'Present results as a range — the “football field” chart.']],
         ['EV vs equity value', ['<b>EV = equity value + debt + preferred + NCI − cash</b>.', 'EV belongs to all capital providers; equity value to shareholders only.', 'Match numerators and denominators: EV ↔ revenue/EBITDA/EBIT/FCFF; equity value ↔ net income/EPS/FCFE.']],
         ['Time value of money', ['PV = FV ÷ (1+r)^n. NPV = Σ CF ÷ (1+r)^t. IRR is the rate where NPV = 0.', 'Accept projects with NPV > 0; IRR > hurdle rate (watch out for non-conventional cash flows).']],
+        ['Excel NPV & IRR', ['<b>NPV(rate, values)</b> treats the first value as end of period 1. For a time-0 outlay use <b>=CF0 + NPV(rate, CF1:CFn)</b>.', '<b>XNPV / XIRR</b> use actual dates — preferred when cash flows are irregular.', 'IRR can have multiple answers when cash flows change sign more than once.']],
       ] },
     d1: { name: 'DCF Fundamentals', icon: '∑', course: 'DCF Valuation Modeling Fundamentals',
       notes: [

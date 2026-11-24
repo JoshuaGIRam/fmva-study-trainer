@@ -53,8 +53,28 @@
   const gens = {};
   const def = (id, unit, topic, diff, fn) => { gens[id] = { id, unit, topic, diff, fn }; };
 
+  // ================= Finance basics =================
+  def('fv', 'ff', 'Time value of money', 1, () => {
+    const pv = ri(5, 50) * 100, r = step(0.04, 0.12, 0.01), n = ri(2, 6);
+    const fv = pv * Math.pow(1 + r, n);
+    return { q: `You invest $${pv.toLocaleString()} today at ${fmt.pct(r, 0)} a year, with interest compounding annually. What is it worth after ${n} years?`,
+      opts: options(fv, [pv * (1 + r * n), pv * Math.pow(1 + r, n - 1), pv / Math.pow(1 + r, n)], (v) => fmt.usd(v, 0)),
+      exp: `Compounding: FV = PV × (1 + r)^n = ${pv.toLocaleString()} × ${(1 + r).toFixed(2)}^${n} = ${fmt.usd(fv, 0)}. Simple interest (${fmt.usd(pv * (1 + r * n), 0)}) misses the interest earned on interest.` };
+  });
+
+  def('is_build', 'ff', 'Income statement terms', 1, () => {
+    const rev = ri(40, 120) * 10, cogs = Math.round(rev * step(0.5, 0.7, 0.05)), sga = Math.round(rev * step(0.1, 0.2, 0.02)), da = Math.round(rev * step(0.03, 0.06, 0.01)), int = ri(5, 30), t = step(0.2, 0.3, 0.05);
+    const gp = rev - cogs, ebitda = gp - sga, ebit = ebitda - da, ebt = ebit - int, ni = ebt * (1 - t);
+    const k = ri(0, 2);
+    const facts = `Revenue $${rev}m, COGS $${cogs}m, SG&A $${sga}m, D&A $${da}m, interest $${int}m, tax rate ${fmt.pct(t, 0)}.`;
+    const walk = `Gross profit = ${rev} − ${cogs} = ${gp}; EBITDA = ${gp} − ${sga} = ${ebitda}; EBIT = ${ebitda} − ${da} = ${ebit}; pre-tax = ${ebit} − ${int} = ${ebt}; net income = ${ebt} × (1 − ${fmt.pct(t, 0)}) = ${ni.toFixed(1)}.`;
+    if (k === 0) return { q: `${facts} What is EBITDA?`, opts: options(ebitda, [gp, ebit, rev - sga], (v) => fmt.m(v, 0)), exp: `EBITDA is profit before interest, tax and D&A: revenue − COGS − SG&A. ${walk}` };
+    if (k === 1) return { q: `${facts} What is EBIT (operating profit)?`, opts: options(ebit, [ebitda, ebt, gp - da], (v) => fmt.m(v, 0)), exp: `EBIT = EBITDA − D&A. ${walk}` };
+    return { q: `${facts} What is net income?`, opts: options(ni, [ebt, ebit * (1 - t), ebitda * (1 - t)], (v) => fmt.m(v, 1)), exp: `Work down the waterfall. ${walk}` };
+  });
+
   // ================= Excel toolkit =================
-  def('excel_npv', 'xl', 'Excel finance functions', 3, () => {
+  def('excel_npv', 'bv', 'Excel NPV & IRR', 3, () => {
     const r = step(0.06, 0.12, 0.01), c0 = -ri(80, 110) * 10, cf = [ri(40, 60) * 10, ri(40, 60) * 10, ri(45, 70) * 10];
     const trueNpv = c0 + cf.reduce((s, c, i) => s + c / Math.pow(1 + r, i + 1), 0);
     const excel = trueNpv / (1 + r); // Excel NPV treats first value as end of period 1
@@ -66,13 +86,13 @@
     };
   });
 
-  def('pmt', 'xl', 'Excel finance functions', 2, () => {
+  def('pmt', 'ff', 'Loans & annuities', 2, () => {
     const P = ri(10, 60) * 10, r = step(0.05, 0.10, 0.005), n = pick([5, 7, 10]);
     const pmt = (P * r) / (1 - Math.pow(1 + r, -n));
     return {
-      q: `A company borrows $${P}m at ${fmt.pct(r, 1)} per year, repaid with equal annual payments over ${n} years. What annual payment does =PMT(${fmt.pct(r, 1)}, ${n}, ${P}) imply (ignore the sign)?`,
+      q: `A company takes a $${P}m loan at ${fmt.pct(r, 1)} a year, repaid in equal annual payments over ${n} years (like a car loan). What is the annual payment? In Excel: =PMT(${fmt.pct(r, 1)}, ${n}, ${P}).`,
       opts: options(pmt, [P / n, (P / n) * (1 + r), P * r + P / n * 0.5, P * r], (v) => fmt.m(v, 2)),
-      exp: `Annuity payment = P × r ÷ (1 − (1+r)^−n) = ${P} × ${fmt.pct(r, 1)} ÷ (1 − ${(1 + r).toFixed(3)}^−${n}) = ${fmt.m(pmt, 2)}. Excel returns it as a negative number (cash out) because the loan amount was entered as positive.`,
+      exp: `Each payment covers that year's interest plus part of the principal, so it must exceed interest-only (${P} × ${fmt.pct(r, 1)} = ${(P * r).toFixed(2)}) but stay below interest + an even principal share on the full balance (${(P * r + P / n).toFixed(2)}). =PMT gives ${fmt.m(pmt, 2)} (shown as negative = cash out). Formula behind it: P × r ÷ (1 − (1+r)^−n). You don't need to memorise it; use PMT.`,
     };
   });
 
@@ -270,7 +290,7 @@
   });
 
   // ================= Intro to valuation =================
-  def('pv', 'bv', 'Time value of money', 1, () => {
+  def('pv', 'ff', 'Time value of money', 1, () => {
     const cf = ri(50, 500), r = step(0.05, 0.12, 0.005), n = ri(2, 8);
     const pv = cf / Math.pow(1 + r, n);
     return { q: `What is the present value of $${cf}m received in ${n} years at a ${fmt.pct(r, 1)} discount rate?`,
